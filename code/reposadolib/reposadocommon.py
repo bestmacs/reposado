@@ -300,6 +300,40 @@ def getLocalPathNameFromURL(url, root_dir=None):
     relative_path = path.lstrip('/')
     return os.path.join(root_dir, relative_path)
 
+def barrelOneURL(full_url):
+    '''Rewrites a single URL to point to our local replica'''
+    our_base_url = pref('BarrelURLBase')
+    if not full_url.startswith(our_base_url):
+        # only rewrite the URL if needed
+        (unused_scheme, unused_netloc,
+         path, unused_query, unused_fragment) = urlparse.urlsplit(full_url)
+        return our_base_url + path
+    else:
+        return full_url
+        
+def barrelURLsForProduct(product):
+    '''Rewrites the URLs for a product'''
+    if 'ServerMetadataURL' in product:
+        product['ServerMetadataURL'] = barrelOneURL(
+            product['ServerMetadataURL'])
+    for package in product.get('Packages', []):
+        if 'URL' in package:
+            package['URL'] = barrelOneURL(package['URL'])
+        if 'MetadataURL' in package:
+            package['MetadataURL'] = barrelOneURL(
+                package['MetadataURL'])
+        # workaround for 10.8.2 issue where client ignores local pkg
+        # and prefers Apple's URL. Need to revisit as we better understand this
+        # issue
+        if 'Digest' in package:
+            # removing the Digest causes 10.8.2 to use the replica's URL
+            # instead of Apple's
+            del package['Digest']
+    distributions = product['Distributions']
+    for dist_lang in distributions.keys():
+        distributions[dist_lang] = barrelOneURL(
+            distributions[dist_lang])
+            
 
 def rewriteOneURL(full_url):
     '''Rewrites a single URL to point to our local replica'''
@@ -335,7 +369,6 @@ def rewriteURLsForProduct(product):
     for dist_lang in distributions.keys():
         distributions[dist_lang] = rewriteOneURL(
             distributions[dist_lang])
-
 
 def rewriteURLs(catalog):
     '''Rewrites all the URLs in the given catalog to point to our local
@@ -388,7 +421,7 @@ def writeBranchCatalogs(localcatalogpath):
                 # for this catalog
                 catalog['Products'][product_key] = \
                     downloaded_products[product_key]
-            elif pref('LocalCatalogURLBase') and product_key in product_info:
+            elif pref('BarrelURLBase') and product_key in product_info:
                 # Product has probably been deprecated by Apple,
                 # so we're using cached product info
                 # First check to see if this product was ever in this
@@ -409,7 +442,7 @@ def writeBranchCatalogs(localcatalogpath):
                                 'has been deprecated. Will use cached info '
                                 'and packages.',
                                  product_key, title, version, branch)
-                            rewriteURLsForProduct(catalog_entry)
+                            barrelURLsForProduct(catalog_entry)
                             catalog['Products'][product_key] = catalog_entry
                             continue
             else:
@@ -480,4 +513,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
