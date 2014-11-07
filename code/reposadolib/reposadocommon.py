@@ -300,9 +300,9 @@ def getLocalPathNameFromURL(url, root_dir=None):
     relative_path = path.lstrip('/')
     return os.path.join(root_dir, relative_path)
 
-def barrelOneURL(full_url):
-    '''Rewrites a single URL to point to our local replica'''
-    our_base_url = pref('BarrelURLBase')
+def rewriteOneURLforDeprecation(full_url):
+    '''Same as rewriteOneURL but do it from the Deprecations URL in the preferences'''
+    our_base_url = pref('DeprecationsURLBase')
     if not full_url.startswith(our_base_url):
         # only rewrite the URL if needed
         (unused_scheme, unused_netloc,
@@ -311,16 +311,16 @@ def barrelOneURL(full_url):
     else:
         return full_url
         
-def barrelURLsForProduct(product):
-    '''Rewrites the URLs for a product'''
+def rewriteURLsForDeprecatedProduct(product):
+    '''Same as rewriteURLsForProduct but do it using rewriteOneURLforDeprecation'''
     if 'ServerMetadataURL' in product:
-        product['ServerMetadataURL'] = barrelOneURL(
+        product['ServerMetadataURL'] = rewriteOneURLforDeprecation(
             product['ServerMetadataURL'])
     for package in product.get('Packages', []):
         if 'URL' in package:
-            package['URL'] = barrelOneURL(package['URL'])
+            package['URL'] = rewriteOneURLforDeprecation(package['URL'])
         if 'MetadataURL' in package:
-            package['MetadataURL'] = barrelOneURL(
+            package['MetadataURL'] = rewriteOneURLforDeprecation(
                 package['MetadataURL'])
         # workaround for 10.8.2 issue where client ignores local pkg
         # and prefers Apple's URL. Need to revisit as we better understand this
@@ -331,7 +331,7 @@ def barrelURLsForProduct(product):
             del package['Digest']
     distributions = product['Distributions']
     for dist_lang in distributions.keys():
-        distributions[dist_lang] = barrelOneURL(
+        distributions[dist_lang] = rewriteOneURLforDeprecation(
             distributions[dist_lang])
             
 
@@ -421,7 +421,7 @@ def writeBranchCatalogs(localcatalogpath):
                 # for this catalog
                 catalog['Products'][product_key] = \
                     downloaded_products[product_key]
-            elif pref('BarrelURLBase') and product_key in product_info:
+            elif pref('DeprecationsURLBase') and product_key in product_info:
                 # Product has probably been deprecated by Apple,
                 # so we're using cached product info
                 # First check to see if this product was ever in this
@@ -442,7 +442,11 @@ def writeBranchCatalogs(localcatalogpath):
                                 'has been deprecated. Will use cached info '
                                 'and packages.',
                                  product_key, title, version, branch)
-                            barrelURLsForProduct(catalog_entry)
+                        	# TODO - this works when we only use a DeprecationsURLBase key in preferences.plist AND
+                        	# we do not use a typical LocalCatalogURLBase. Ideally we would add a check for the presence of
+                        	# both keys which would give us the option to cache and serve current updates  
+                        	# somewhere other than Apple and cache deprecations to serve from somewhere else.
+                            rewriteURLsForDeprecatedProduct(catalog_entry)
                             catalog['Products'][product_key] = catalog_entry
                             continue
             else:
